@@ -8,7 +8,7 @@ all: fmt build
 # Build the binary
 build:
 	@echo "Building paman..."
-	go build -o bin/paman ./cmd/paman
+	go build -tags sqlite_fts5 -o bin/paman ./cmd/paman
 
 # Run all tests
 test:
@@ -23,7 +23,7 @@ test-coverage:
 # Run database tests (requires FTS5)
 test-db:
 	@echo "Running database tests (requires FTS5)..."
-	go test --tags sqlite3 ./internal/db/... -v
+	go test -tags sqlite_fts5 ./internal/infrastructure/persistence/sqlite/... -v
 
 # Format all Go files
 fmt:
