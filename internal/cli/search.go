@@ -2,10 +2,8 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/arham09/paman/internal/db"
-	"github.com/arham09/paman/pkg/config"
+	"github.com/arham09/paman/internal/cli/handler"
 	"github.com/spf13/cobra"
 )
 
@@ -22,58 +20,12 @@ This command performs a case-insensitive search across all credential fields.`,
 
 // runSearch executes the search command
 func runSearch(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("search query required")
+	}
 	query := args[0]
 
-	// Get paths
-	publicKeyPath, err := config.GetPublicKeyPath()
-	if err != nil {
-		return fmt.Errorf("failed to get public key path: %w", err)
-	}
-
-	databasePath, err := config.GetDatabasePath()
-	if err != nil {
-		return fmt.Errorf("failed to get database path: %w", err)
-	}
-
-	// Verify initialization (only check public key)
-	if _, err := os.Stat(publicKeyPath); os.IsNotExist(err) {
-		return fmt.Errorf("paman not initialized. Run 'paman init' first")
-	}
-
-	if _, err := os.Stat(databasePath); os.IsNotExist(err) {
-		return fmt.Errorf("database not found. Run 'paman init' first")
-	}
-
-	// Open database
-	database, err := db.OpenDatabase(databasePath)
-	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
-	}
-	defer database.Close()
-
-	// Search credentials
-	credentials, err := db.SearchCredentials(database, query)
-	if err != nil {
-		return fmt.Errorf("failed to search credentials: %w", err)
-	}
-
-	if len(credentials) == 0 {
-		fmt.Printf("No credentials found matching '%s'.\n", query)
-		return nil
-	}
-
-	// Display results
-	fmt.Printf("\nFound %d credential(s) matching '%s':\n\n", len(credentials), query)
-	for _, cred := range credentials {
-		display := cred.ToDisplay()
-		fmt.Printf("ID: %d\n", display.ID)
-		fmt.Printf("  Title: %s\n", display.Title)
-		if display.Address != "" {
-			fmt.Printf("  Address: %s\n", display.Address)
-		}
-		fmt.Printf("  Username: %s\n", display.Username)
-		fmt.Println()
-	}
-
-	return nil
+	// Services already initialized by root.PreRun
+	h := handler.NewSearchHandler(GetCredentialService())
+	return h.Run(query)
 }

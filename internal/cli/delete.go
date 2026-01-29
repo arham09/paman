@@ -2,13 +2,14 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 
-	"github.com/arham09/paman/internal/db"
-	"github.com/arham09/paman/pkg/config"
+	"github.com/arham09/paman/internal/cli/handler"
 	"github.com/spf13/cobra"
 )
+
+// Flag for delete command
+var forceDelete bool
 
 // deleteCmd represents "paman delete <id>" command
 // Deletes a credential permanently
@@ -21,6 +22,10 @@ This action cannot be undone.`,
 	RunE: runDelete,
 }
 
+func init() {
+	deleteCmd.Flags().BoolVar(&forceDelete, "force", false, "Skip confirmation prompt")
+}
+
 // runDelete executes the delete command
 func runDelete(cmd *cobra.Command, args []string) error {
 	// Parse credential ID
@@ -29,40 +34,14 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid credential ID: %w", err)
 	}
 
-	// Get paths
-	publicKeyPath, err := config.GetPublicKeyPath()
+	// Services already initialized by root.PreRun
+	h := handler.NewDeleteHandler(GetCredentialService())
+
+	err = h.Run(id, false, forceDelete)
 	if err != nil {
-		return fmt.Errorf("failed to get public key path: %w", err)
+		return err
 	}
 
-	databasePath, err := config.GetDatabasePath()
-	if err != nil {
-		return fmt.Errorf("failed to get database path: %w", err)
-	}
-
-	// Verify initialization (only check public key)
-	if _, err := os.Stat(publicKeyPath); os.IsNotExist(err) {
-		return fmt.Errorf("paman not initialized. Run 'paman init' first")
-	}
-
-	if _, err := os.Stat(databasePath); os.IsNotExist(err) {
-		return fmt.Errorf("database not found. Run 'paman init' first")
-	}
-
-	// Open database
-	database, err := db.OpenDatabase(databasePath)
-	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
-	}
-	defer database.Close()
-
-	// Delete credential
-	err = db.DeleteCredential(database, id)
-	if err != nil {
-		return fmt.Errorf("failed to delete credential: %w", err)
-	}
-
-	fmt.Printf("✓ Credential ID %d deleted successfully\n", id)
-
+	fmt.Println(h.FormatSuccessMessage(id))
 	return nil
 }

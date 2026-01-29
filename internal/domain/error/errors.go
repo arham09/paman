@@ -1,15 +1,15 @@
-// Package models defines the core data structures used throughout the paman application.
-// This file contains all error constants used across the application.
+// Package error defines the domain errors used throughout the paman application.
+// These errors represent business logic failures and domain-specific error conditions.
 //
 // Purpose: Centralized error definitions allow for consistent error handling
 // and make it easy to check for specific error conditions using errors.Is().
 //
 // Usage Example:
 //
-//	if err == models.ErrNotFound {
+//	if errors.Is(err, domain.ErrNotFound) {
 //	    // Handle not found case
 //	}
-package models
+package error
 
 import "errors"
 

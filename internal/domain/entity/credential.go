@@ -1,14 +1,24 @@
-// Package models defines the core data structures used throughout the paman application.
-// These structures represent credentials, errors, and other domain models.
-package models
+// Package entity defines the core domain entities used throughout the paman application.
+// These entities represent the business objects and their validation rules.
+//
+// Purpose: Entities are the heart of the domain layer. They contain business logic
+// and validation rules that must always be enforced, regardless of where they're used.
+package entity
 
 import (
+	"errors"
+	"strings"
 	"time"
+)
+
+var (
+	// ErrValidationFailed is returned when entity validation fails.
+	ErrValidationFailed = errors.New("validation failed")
 )
 
 // Credential represents a single password entry stored in the database.
 //
-// Purpose: This is the primary data structure for storing user credentials.
+// Purpose: This is the primary domain entity for storing user credentials.
 // It contains all the information about a service/account including the encrypted password.
 //
 // Security Considerations:
@@ -23,7 +33,8 @@ import (
 //   - EncryptedPassword is only decrypted when explicitly requested (with --show-password)
 type Credential struct {
 	// ID is the unique identifier for this credential in the database.
-	// It's auto-incremented by SQLite and used to reference specific credentials.
+	// It's auto-incremented by the database and used to reference specific credentials.
+	// For new credentials, ID should be 0 (will be set by repository).
 	ID int `json:"id"`
 
 	// Title is the name/identifier for the credential (e.g., "GitHub", "Gmail").
@@ -41,7 +52,7 @@ type Credential struct {
 	// EncryptedPassword contains the password encrypted with RSA-4096-OAEP.
 	// IMPORTANT: This field is never exposed in JSON (json:"-" tag)
 	// The password is encrypted with the PUBLIC key before storage.
-	// It can only be decrypted with the PRIVATE key (which is passphrase-protected).
+	// It can only be decrypted with the PRIVATE key.
 	// Stored as []byte but Base64-encoded when stored in SQLite TEXT column.
 	EncryptedPassword []byte `json:"-"` // Never expose in JSON
 
@@ -87,6 +98,45 @@ type CredentialDisplay struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// Validate checks if the credential has valid data.
+//
+// Purpose: Enforces business rules for credential data.
+// This should be called before creating or updating credentials.
+//
+// Returns:
+//   - error: ErrValidationFailed if validation fails, nil otherwise
+//
+// Validation Rules:
+//   - Title: Required, non-empty after trimming
+//   - Username: Required, non-empty after trimming
+//   - Address: Optional, can be empty
+//   - EncryptedPassword: Required for new credentials, optional for updates
+//
+// Usage:
+//   if err := credential.Validate(); err != nil {
+//       return fmt.Errorf("invalid credential: %w", err)
+//   }
+func (c *Credential) Validate() error {
+	// Validate title
+	if strings.TrimSpace(c.Title) == "" {
+		return errors.New("title is required")
+	}
+
+	// Validate username
+	if strings.TrimSpace(c.Username) == "" {
+		return errors.New("username is required")
+	}
+
+	// Address is optional, so we don't validate it
+
+	// EncryptedPassword validation depends on context
+	// For new credentials (ID == 0), encrypted password is required
+	// For updates (ID > 0), we allow partial updates without password
+	// This validation is typically handled at the application service layer
+
+	return nil
+}
+
 // ToDisplay converts a Credential to a CredentialDisplay, removing the encrypted password.
 //
 // Purpose: Safely converts a full Credential (with encrypted password) to a displayable version.
@@ -100,7 +150,7 @@ type CredentialDisplay struct {
 //
 // Usage Example:
 //
-//	credential := db.GetCredential(id)
+//	credential := repository.GetByID(id)
 //	display := credential.ToDisplay()
 //	// Now 'display' can be safely shown to the user
 func (c *Credential) ToDisplay() CredentialDisplay {

@@ -80,6 +80,21 @@ by a passphrase using AES-256-GCM encryption.
 
 NEW: Private key is provided via --private-key flag for all operations.
 The private key is printed during 'paman init' and must be saved securely.`,
+
+	// PersistentPreRunE runs before each command (except help and completion)
+	// This initializes services for all commands except 'init' (which creates fresh services)
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Skip for help and completion commands
+		if cmd.Name() == "help" || cmd.Name() == "completion" {
+			return nil
+		}
+		// Don't initialize for init command (it creates fresh services)
+		if cmd.Name() == "init" {
+			return nil
+		}
+		// Initialize services for all other commands
+		return InitializeServices("")
+	},
 }
 
 // Execute runs the root command and all subcommands.

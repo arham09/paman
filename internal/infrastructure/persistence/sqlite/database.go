@@ -1,8 +1,7 @@
-// Package db provides database connection and schema management for paman.
+// Package sqlite provides SQLite database connection and schema management for paman.
 // It handles SQLite database operations including connection pooling and schema initialization.
 //
 // Database: SQLite3 (single-file embedded database)
-// Location: ~/.paman/credentials.db (fixed location via config package)
 // Permissions: 0600 (owner read/write only)
 //
 // Why SQLite?
@@ -16,7 +15,7 @@
 //   - MaxOpenConns: 1 (SQLite doesn't support multiple writers)
 //   - MaxIdleConns: 1 (Single connection is sufficient)
 //   - This prevents write locking issues
-package db
+package sqlite
 
 import (
 	"database/sql"
@@ -51,7 +50,7 @@ var schemaFS embed.FS
 // This is used by all commands after the initial setup.
 //
 // Parameters:
-//   - dbPath: Path to the SQLite database file (from config.GetDatabasePath())
+//   - dbPath: Path to the SQLite database file (from config service)
 //
 // Returns:
 //   - *sql.DB: Database connection object ready for queries
@@ -61,19 +60,6 @@ var schemaFS embed.FS
 //   - Single connection (MaxOpenConns=1)
 //   - Prevents write locking issues in SQLite
 //   - SQLite doesn't support multiple concurrent writers anyway
-//
-// When this is called:
-//   - "paman add" - To insert new credentials
-//   - "paman get" - To retrieve specific credentials
-//   - "paman list" - To list all credentials
-//   - "paman search" - To search credentials
-//   - "paman update" - To modify credentials
-//   - "paman delete" - To remove credentials
-//
-// Error Handling:
-//   - Returns error if database file doesn't exist
-//   - Returns error if connection cannot be established
-//   - Caller should check if paman has been initialized
 func OpenDatabase(dbPath string) (*sql.DB, error) {
 	// Check if database file exists before attempting to open
 	// This provides a clearer error message for users
@@ -149,9 +135,6 @@ func OpenDatabase(dbPath string) (*sql.DB, error) {
 //   - If any step fails, removes the partially created database file
 //   - Prevents leaving corrupted/incomplete databases
 //   - User can just run init again
-//
-// When this is called:
-//   - During "paman init" command only
 func CreateDatabase(dbPath string) (*sql.DB, error) {
 	// Check if database file already exists
 	// Prevents accidental overwriting of existing data
@@ -213,39 +196,4 @@ func CreateDatabase(dbPath string) (*sql.DB, error) {
 	// Return the ready-to-use database connection
 	// Database is now fully initialized and secured
 	return db, nil
-}
-
-// CloseDatabase closes the database connection and releases resources.
-//
-// Purpose: Properly closes the database connection when done.
-// Prevents resource leaks and ensures all data is written.
-//
-// Parameters:
-//   - db: Database connection to close (can be nil)
-//
-// Returns:
-//   - error: Error if closing fails (rare)
-//
-// Safety:
-//   - Handles nil db gracefully (no-op if db is nil)
-//   - Safe to call multiple times (idempotent)
-//
-// When to call:
-//   - After all database operations are complete
-//   - In defer statements (defer db.Close())
-//   - Before program exit
-//
-// Note: Database connection should be closed even if errors occur
-// defer is typically used: defer db.CloseDatabase(db)
-func CloseDatabase(db *sql.DB) error {
-	// Handle nil database connection gracefully
-	// This prevents panics if Close() is called on a nil DB
-	if db == nil {
-		return nil
-	}
-
-	// Close the database connection
-	// Flushes any pending writes and releases file handles
-	// Returns error if close fails (e.g., during a transaction)
-	return db.Close()
 }

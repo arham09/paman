@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/arham09/paman/internal/models"
+	domainerror "github.com/arham09/paman/internal/domain/error"
 	"golang.org/x/term"
 )
 
@@ -111,13 +111,13 @@ func getPassphrase() (string, error) {
 		} else {
 			// Last attempt failed - no more retries
 			fmt.Println("Too many failed attempts.")
-			return "", models.ErrTooManyAttempts
+			return "", domainerror.ErrTooManyAttempts
 		}
 	}
 
 	// Should not reach here (loop handles all cases)
 	// But Go requires a return statement
-	return "", models.ErrTooManyAttempts
+	return "", domainerror.ErrTooManyAttempts
 }
 
 // getPassphraseWithValidation prompts for passphrase and validates against the encrypted private key.
@@ -204,12 +204,12 @@ func getPassphraseWithValidation(privateKeyPath string) (string, error) {
 		} else {
 			// Last attempt failed - no more retries
 			fmt.Println("Too many failed attempts.")
-			return "", models.ErrTooManyAttempts
+			return "", domainerror.ErrTooManyAttempts
 		}
 	}
 
 	// Should not reach here (loop handles all cases)
-	return "", models.ErrTooManyAttempts
+	return "", domainerror.ErrTooManyAttempts
 }
 
 // loadPrivateKeyWithPath is a placeholder function for loading and validating a private key.

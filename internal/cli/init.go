@@ -1,16 +1,10 @@
 package cli
 
 import (
-	"crypto/x509"
-	"encoding/pem"
-	"fmt"
-	"os"
-	"strings"
-
-	"github.com/arham09/paman/internal/crypto"
-	"github.com/arham09/paman/internal/db"
-	"github.com/arham09/paman/internal/models"
-	"github.com/arham09/paman/pkg/config"
+	"github.com/arham09/paman/internal/cli/handler"
+	"github.com/arham09/paman/internal/infrastructure/config"
+	"github.com/arham09/paman/internal/infrastructure/security"
+	"github.com/arham09/paman/internal/application/service"
 	"github.com/spf13/cobra"
 )
 
@@ -62,122 +56,18 @@ The private key will be printed to stdout - SAVE IT SECURELY!`,
 //   - Clear error messages guide the user
 //
 // Security Considerations:
-//   - Private key is encrypted BEFORE being written to disk
-//   - Passphrase is validated for minimum length
-//   - Passphrase confirmation prevents typos
+//   - Private key is printed to stdout (not stored in ~/.paman/)
+//   - Public key is saved to ~/.paman/public_key.pem
 //   - File permissions are set correctly (0600 for sensitive files)
 func runInit(cmd *cobra.Command, args []string) error {
-	// Step 1: Ensure config directory exists
-	// Creates ~/.paman/ with 0700 permissions (owner only)
-	// This prevents other users from accessing sensitive data
-	configDir, err := config.EnsureConfigDir()
-	if err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
+	// Create fresh services for init (don't use globals)
+	configService := config.NewFilesystemConfig()
+	cryptoService := security.NewRSACryptoService()
+	initService := service.NewInitializationService(cryptoService, configService)
 
-	// Step 2: Get all file paths
-	// These paths are centralized in config package
-	// Public key: ~/.paman/public_key.pem (saved for encryption)
-	// Database: ~/.paman/credentials.db (encrypted passwords)
-	// Private key is NOT stored in ~/.paman/ anymore (user provides via --private-key flag)
-	publicKeyPath, err := config.GetPublicKeyPath()
-	if err != nil {
-		return fmt.Errorf("failed to get public key path: %w", err)
-	}
+	// Create handler with initialization service
+	h := handler.NewInitHandler(initService, nil, configService)
 
-	databasePath, err := config.GetDatabasePath()
-	if err != nil {
-		return fmt.Errorf("failed to get database path: %w", err)
-	}
-
-	// Step 3: Check if already initialized
-	// Prevents accidental overwriting of existing database
-	// Only check for public key and database (private key is not stored here anymore)
-	if _, err := os.Stat(publicKeyPath); err == nil {
-		if _, err := os.Stat(databasePath); err == nil {
-			return fmt.Errorf("paman is already initialized at %s", configDir)
-		}
-	}
-
-	if _, err := os.Stat(databasePath); err == nil {
-		return models.ErrDatabaseExists
-	}
-
-	// Step 4: Generate RSA key pair
-	// RSA-4096 provides strong encryption for passwords
-	// This can take a second or two on slower machines
-	fmt.Println("Generating 4096-bit RSA key pair...")
-	privateKey, publicKey, err := crypto.GenerateKeyPair()
-	if err != nil {
-		return fmt.Errorf("failed to generate key pair: %w", err)
-	}
-
-	// Step 5: Print private key to stdout (NEW DESIGN)
-	// Private key is NOT saved to disk in ~/.paman/
-	// User must save this securely (USB drive, encrypted volume, password manager, etc.)
-	fmt.Println("\n" + strings.Repeat("=", 70))
-	fmt.Println("PRIVATE KEY - SAVE THIS SECURELY!")
-	fmt.Println(strings.Repeat("=", 70))
-	fmt.Println("\nCopy the key below and save it to a secure location:")
-	fmt.Println("You will need to provide this file via --private-key flag for all operations.\n")
-
-	// Encode private key to PEM format
-	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
-	privateKeyPEM := &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: privateKeyBytes,
-	}
-
-	// Print private key to stdout
-	if err := pem.Encode(os.Stdout, privateKeyPEM); err != nil {
-		return fmt.Errorf("failed to encode private key: %w", err)
-	}
-
-	fmt.Println("\n" + strings.Repeat("=", 70))
-	fmt.Println("IMPORTANT: Keep this private key secure and never share it!")
-	fmt.Println(strings.Repeat("=", 70) + "\n")
-
-	// Step 6: Save public key
-	// Public key is saved to ~/.paman/public_key.pem
-	// Used for encrypting passwords before storage
-	fmt.Println("Saving public key to ~/.paman/public_key.pem...")
-	if err := crypto.SavePublicKey(publicKey, publicKeyPath); err != nil {
-		return fmt.Errorf("failed to save public key: %w", err)
-	}
-
-	// Step 7: Create database with schema
-	// Creates credentials.db with tables, indexes, and FTS search
-	// File has 0600 permissions (owner read/write only)
-	fmt.Println("Creating encrypted database...")
-	database, err := db.CreateDatabase(databasePath)
-	if err != nil {
-		// Cleanup: Remove public key if database creation fails
-		os.Remove(publicKeyPath)
-		return fmt.Errorf("failed to create database: %w", err)
-	}
-	defer database.Close()
-
-	// Step 8: Display success message
-	fmt.Printf("\n✓ paman initialized successfully!\n")
-	fmt.Printf("  Config directory: %s\n", configDir)
-	fmt.Printf("  Public key: %s\n", publicKeyPath)
-	fmt.Printf("  Database: %s\n", databasePath)
-
-	// Remind user about security
-	fmt.Println("\n" + strings.Repeat("=", 70))
-	fmt.Println("SETUP COMPLETE!")
-	fmt.Println(strings.Repeat("=", 70))
-	fmt.Println("\n⚠️  CRITICAL SECURITY INFORMATION:")
-	fmt.Println("  1. Your PRIVATE KEY was printed above - save it securely!")
-	fmt.Println("     Store it on a USB drive, encrypted volume, or password manager.")
-	fmt.Println()
-	fmt.Println("  2. Use the --private-key flag for all operations:")
-	fmt.Println("     paman --private-key /path/to/private_key.pem list")
-	fmt.Println("     paman --private-key /path/to/private_key.pem add --title 'GitHub' ...")
-	fmt.Println()
-	fmt.Println("  3. NEVER share your private key with anyone!")
-	fmt.Println("  4. Back up your ~/.paman directory regularly.")
-	fmt.Println(strings.Repeat("=", 70) + "\n")
-
-	return nil
+	// Execute initialization
+	return h.Run("")
 }
