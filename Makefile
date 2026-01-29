@@ -8,7 +8,7 @@ all: fmt build
 # Build the binary
 build:
 	@echo "Building paman..."
-	go build -tags sqlite_fts5 -o bin/paman ./cmd/paman
+	go build -ldflags="-s -w" -tags sqlite_fts5 -o bin/paman ./cmd/paman
 
 # Run all tests
 test:
